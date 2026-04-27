@@ -86,6 +86,39 @@ ${athlete.name}`;
   return { subject, body };
 }
 
+function fallbackCoachOutreach(coach, athlete) {
+  const statLines = [
+    `UTR: ${athlete.utr}`,
+    athlete.itf_rank ? `ITF Junior Ranking: #${athlete.itf_rank}` : null,
+    athlete.atp_rank ? `ATP Ranking: #${athlete.atp_rank}` : null,
+    athlete.gpa      ? `GPA: ${athlete.gpa}` : null,
+  ].filter(Boolean).join(' | ');
+
+  const coachName   = coach.name     ?? 'Coach';
+  const coachSchool = coach.school   ?? 'our program';
+  const coachRole   = coach.position ?? 'Tennis Coach';
+  const division    = coach.division ?? '';
+
+  const subject = `${coachSchool} Tennis — Recruiting Interest in ${athlete.name}`;
+  const body = `Dear ${athlete.name},
+
+My name is ${coachName}, and I serve as ${coachRole} at ${coachSchool}${division ? ` (${division})` : ''}. I came across your profile and wanted to reach out personally.
+
+Your competitive profile caught my attention — ${statLines}. We believe you could be a strong fit for our program and contribute at a high level from day one.
+
+${coachSchool} offers a competitive environment where student-athletes excel both on and off the court. We would love to tell you more about what our program can offer you academically and athletically.
+
+I would welcome the chance to connect — whether that's a quick call, a campus visit, or attending one of your upcoming tournaments. Please don't hesitate to reach out at your convenience.
+
+Looking forward to hearing from you.
+
+Best regards,
+${coachName}
+${coachRole}, ${coachSchool}`;
+
+  return { subject, body };
+}
+
 // ── AI-powered generation ────────────────────────────────────────────────────
 
 async function generateReasoning(athlete, school, subScores, fitScore) {
@@ -167,4 +200,48 @@ School: ${school.name} (${school.division}, ${school.location})`;
   }
 }
 
-module.exports = { generateReasoning, generateOutreachEmail };
+async function generateCoachOutreachEmail(coach, athlete) {
+  const client = getClient();
+  if (!client) return fallbackCoachOutreach(coach, athlete);
+
+  const statLines = [
+    `UTR: ${athlete.utr}`,
+    athlete.itf_rank ? `ITF Junior Ranking: #${athlete.itf_rank}` : null,
+    athlete.atp_rank ? `ATP Ranking: #${athlete.atp_rank}` : null,
+    athlete.gpa      ? `GPA: ${athlete.gpa}` : null,
+  ].filter(Boolean).join(', ');
+
+  const coachName   = coach.name     ?? 'Coach';
+  const coachSchool = coach.school   ?? 'our program';
+  const coachRole   = coach.position ?? 'Tennis Coach';
+  const division    = coach.division ?? '';
+
+  const prompt = `Write a professional recruiting email from a college tennis coach to a prospective student-athlete.
+
+Tone: warm, direct, genuine. Show real interest in this specific athlete — not a form letter.
+Format: Subject line first (prefix "Subject: "), then a blank line, then 3–4 short paragraphs.
+Paragraphs: (1) who the coach is and their school, (2) why this athlete stands out (reference their stats), (3) what the program offers, (4) call to action — invite a call, visit, or reply.
+
+Coach: ${coachName}, ${coachRole} at ${coachSchool}${division ? ` (${division})` : ''}
+Athlete: ${athlete.name}, age ${athlete.age ?? 'N/A'}, from ${athlete.nationality ?? 'N/A'}
+Athlete stats: ${statLines}`;
+
+  try {
+    const res = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 500,
+      temperature: 0.5,
+    });
+    const raw = res.choices[0].message.content.trim();
+    const subjectMatch = raw.match(/^Subject:\s*(.+)/im);
+    const subject = subjectMatch ? subjectMatch[1].trim() : `${coachSchool} Tennis — Recruiting Interest in ${athlete.name}`;
+    const body = raw.replace(/^Subject:.*\n?/im, '').trim();
+    return { subject, body };
+  } catch (err) {
+    console.error('[aiService] coach outreach failed:', err.message);
+    return fallbackCoachOutreach(coach, athlete);
+  }
+}
+
+module.exports = { generateReasoning, generateOutreachEmail, generateCoachOutreachEmail };

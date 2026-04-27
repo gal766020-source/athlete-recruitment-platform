@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Spinner from './Spinner';
 
-export default function OutreachModal({ athlete, schoolName, onClose }) {
+export default function OutreachModal({ athlete, schoolName, coach, sender, onClose }) {
   const { authFetch } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,9 +16,12 @@ export default function OutreachModal({ athlete, schoolName, onClose }) {
       setLoading(true);
       setError(null);
       try {
+        const payload = sender === 'coach'
+          ? { athlete, sender: 'coach', coach }
+          : { athlete, school: schoolName };
         const res = await authFetch('/api/generate-outreach', {
           method: 'POST',
-          body: JSON.stringify({ athlete, school: schoolName }),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
@@ -52,7 +55,7 @@ export default function OutreachModal({ athlete, schoolName, onClose }) {
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-panel">
         <div className="modal-header">
-          <h2>Outreach Draft — {schoolName}</h2>
+          <h2>Outreach Draft — {sender === 'coach' ? `to ${athlete.name}` : schoolName}</h2>
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 

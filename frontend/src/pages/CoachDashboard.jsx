@@ -14,6 +14,14 @@ export default function CoachDashboard() {
   const [loading, setLoading]   = useState(false);
   const [searched, setSearched] = useState(false);
   const [outreachTarget, setOutreachTarget] = useState(null);
+  const [coachProfile, setCoachProfile] = useState(null);
+
+  useEffect(() => {
+    authFetch('/api/coaches/me')
+      .then((r) => r.json())
+      .then(({ user, profile }) => setCoachProfile({ name: user?.full_name || user?.username, school: profile?.school_name, position: profile?.position, division: profile?.division }))
+      .catch(() => {});
+  }, []);
 
   const [filters, setFilters] = useState({
     utr_min: '', utr_max: '', nationality: '',
@@ -52,8 +60,9 @@ export default function CoachDashboard() {
     <div className="page-container wide">
       {outreachTarget && (
         <OutreachModal
-          athlete={{ name: outreachTarget.full_name || outreachTarget.username, utr: outreachTarget.utr, nationality: outreachTarget.nationality }}
-          schoolName="your program"
+          athlete={{ name: outreachTarget.full_name || outreachTarget.username, utr: outreachTarget.utr, nationality: outreachTarget.nationality, age: outreachTarget.age, itf_rank: outreachTarget.itf_rank, gpa: outreachTarget.gpa }}
+          coach={coachProfile}
+          sender="coach"
           onClose={() => setOutreachTarget(null)}
         />
       )}
