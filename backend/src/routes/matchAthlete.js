@@ -69,7 +69,7 @@ router.post('/', requireAuth, async (req, res, next) => {
     );
 
     // Persist to DB
-    const searchId = saveSearch({
+    const searchId = await saveSearch({
       userId:              req.user.userId,
       athlete,
       preferences,

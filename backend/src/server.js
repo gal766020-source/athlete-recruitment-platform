@@ -2,18 +2,17 @@ require('dotenv').config();
 const express = require('express');
 const cors    = require('cors');
 
-const { getDb } = require('./db/index');
-getDb();
+const { connectDb } = require('./db/index');
 
-const authRouter          = require('./routes/auth');
-const matchAthleteRouter  = require('./routes/matchAthlete');
+const authRouter             = require('./routes/auth');
+const matchAthleteRouter     = require('./routes/matchAthlete');
 const generateOutreachRouter = require('./routes/generateOutreach');
-const historyRouter       = require('./routes/history');
-const playersRouter       = require('./routes/players');
-const schoolsRouter       = require('./routes/schools');
-const athletesRouter      = require('./routes/athletes');
-const coachesRouter       = require('./routes/coaches');
-const sendOutreachRouter  = require('./routes/sendOutreach');
+const historyRouter          = require('./routes/history');
+const playersRouter          = require('./routes/players');
+const schoolsRouter          = require('./routes/schools');
+const athletesRouter         = require('./routes/athletes');
+const coachesRouter          = require('./routes/coaches');
+const sendOutreachRouter     = require('./routes/sendOutreach');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -49,9 +48,17 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
 
-app.listen(PORT, () => {
-  console.log(`[server] Running on http://localhost:${PORT}`);
-  console.log(`[server] OpenAI:    ${process.env.OPENAI_API_KEY    ? 'enabled' : 'fallback mode'}`);
-  console.log(`[server] Resend:    ${process.env.RESEND_API_KEY    ? 'enabled' : 'draft mode only'}`);
-  console.log(`[server] Scorecard: ${process.env.COLLEGE_SCORECARD_API_KEY ? 'enabled' : 'local data'}`);
+async function start() {
+  await connectDb();
+  app.listen(PORT, () => {
+    console.log(`[server] Running on http://localhost:${PORT}`);
+    console.log(`[server] OpenAI:    ${process.env.OPENAI_API_KEY             ? 'enabled' : 'fallback mode'}`);
+    console.log(`[server] Resend:    ${process.env.RESEND_API_KEY             ? 'enabled' : 'draft mode only'}`);
+    console.log(`[server] Scorecard: ${process.env.COLLEGE_SCORECARD_API_KEY  ? 'enabled' : 'local data'}`);
+  });
+}
+
+start().catch((err) => {
+  console.error('[server] Startup failed:', err);
+  process.exit(1);
 });

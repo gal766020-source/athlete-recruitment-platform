@@ -1,42 +1,42 @@
-const Database = require('better-sqlite3');
+const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
-const path = require('path');
-const fs = require('fs');
 
-const DATA_DIR = path.join(__dirname, '../../data');
-const DB_PATH  = path.join(DATA_DIR, 'arp.db');
+let pool;
 
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-
-let db;
-
-function getDb() {
-  if (!db) {
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    initSchema();
-    migrateSchema();
-    seedAdmin();
+function getPool() {
+  if (!pool) {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('localhost')
+        ? { rejectUnauthorized: false }
+        : false,
+    });
   }
-  return db;
+  return pool;
 }
 
-function initSchema() {
-  db.exec(`
+async function connectDb() {
+  const p = getPool();
+  await initSchema(p);
+  await seedAdmin(p);
+  console.log('[db] PostgreSQL connected');
+}
+
+async function initSchema(p) {
+  await p.query(`
     CREATE TABLE IF NOT EXISTS users (
-      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      id            SERIAL PRIMARY KEY,
       username      TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       email         TEXT,
       full_name     TEXT,
       role          TEXT NOT NULL DEFAULT 'athlete',
-      created_at    TEXT DEFAULT (datetime('now'))
+      created_at    TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS athlete_profiles (
-      id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id         INTEGER UNIQUE NOT NULL,
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       age             INTEGER,
       nationality     TEXT,
       utr             REAL,
@@ -48,39 +48,38 @@ function initSchema() {
       video_url       TEXT,
       bio             TEXT,
       is_public       INTEGER DEFAULT 1,
-      updated_at      TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      updated_at      TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS coach_profiles (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id     INTEGER UNIQUE NOT NULL,
+      id          SERIAL PRIMARY KEY,
+      user_id     INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       school_name TEXT,
       division    TEXT,
       position    TEXT,
-      updated_at  TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS searches (
-      id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id               INTEGER NOT NULL,
+      id                    SERIAL PRIMARY KEY,
+      user_id               INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       athlete_name          TEXT NOT NULL,
       athlete_data          TEXT NOT NULL,
       preferences           TEXT NOT NULL,
       results               TEXT NOT NULL,
       player_strength_score REAL NOT NULL,
       match_count           INTEGER NOT NULL DEFAULT 0,
-      created_at            TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      created_at            TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS colleges_cache (
       school_id  TEXT PRIMARY KEY,
       data       TEXT NOT NULL,
-      fetched_at TEXT DEFAULT (datetime('now'))
+      fetched_at TIMESTAMPTZ DEFAULT NOW()
     );
+  `);
 
+  await p.query(`
     CREATE INDEX IF NOT EXISTS idx_searches_user    ON searches(user_id);
     CREATE INDEX IF NOT EXISTS idx_searches_created ON searches(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_athlete_utr      ON athlete_profiles(utr DESC);
@@ -88,91 +87,88 @@ function initSchema() {
   `);
 }
 
-function migrateSchema() {
-  // Add new columns to users if upgrading an existing DB
-  const addCol = (table, col, def) => {
-    try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`); } catch {}
-  };
-  addCol('users', 'email',     'TEXT');
-  addCol('users', 'full_name', 'TEXT');
-  addCol('users', 'role',      "TEXT NOT NULL DEFAULT 'athlete'");
-}
-
-function seedAdmin() {
+async function seedAdmin(p) {
   const username = process.env.ADMIN_USERNAME || 'admin';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
-  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
-  if (!existing) {
+  const { rows } = await p.query('SELECT id FROM users WHERE username = $1', [username]);
+  if (rows.length === 0) {
     const hash = bcrypt.hashSync(password, 10);
-    db.prepare(
-      'INSERT INTO users (username, password_hash, role, full_name) VALUES (?, ?, ?, ?)'
-    ).run(username, hash, 'admin', 'Admin');
+    await p.query(
+      'INSERT INTO users (username, password_hash, role, full_name) VALUES ($1, $2, $3, $4)',
+      [username, hash, 'admin', 'Admin']
+    );
     console.log(`[db] Seeded admin user: ${username}`);
   }
 }
 
 // ── User helpers ──────────────────────────────────────────────────────────────
 
-function getUserByUsername(username) {
-  return db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+async function getUserByUsername(username) {
+  const { rows } = await getPool().query('SELECT * FROM users WHERE username = $1', [username]);
+  return rows[0] || null;
 }
 
-function getUserById(id) {
-  return db.prepare('SELECT id, username, email, full_name, role, created_at FROM users WHERE id = ?').get(id);
-}
-
-function createUser({ username, password, email, fullName, role }) {
-  const hash = bcrypt.hashSync(password, 10);
-  const stmt = db.prepare(
-    'INSERT INTO users (username, password_hash, email, full_name, role) VALUES (?, ?, ?, ?, ?)'
+async function getUserById(id) {
+  const { rows } = await getPool().query(
+    'SELECT id, username, email, full_name, role, created_at FROM users WHERE id = $1', [id]
   );
-  const info = stmt.run(username, hash, email || null, fullName || null, role || 'athlete');
-  return info.lastInsertRowid;
+  return rows[0] || null;
+}
+
+async function createUser({ username, password, email, fullName, role }) {
+  const hash = bcrypt.hashSync(password, 10);
+  const { rows } = await getPool().query(
+    'INSERT INTO users (username, password_hash, email, full_name, role) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+    [username, hash, email || null, fullName || null, role || 'athlete']
+  );
+  return rows[0].id;
 }
 
 // ── Athlete profile helpers ───────────────────────────────────────────────────
 
-function getAthleteProfile(userId) {
-  return db.prepare('SELECT * FROM athlete_profiles WHERE user_id = ?').get(userId);
+async function getAthleteProfile(userId) {
+  const { rows } = await getPool().query('SELECT * FROM athlete_profiles WHERE user_id = $1', [userId]);
+  return rows[0] || null;
 }
 
-function getAthleteProfileByUsername(username) {
-  return db.prepare(`
+async function getAthleteProfileByUsername(username) {
+  const { rows } = await getPool().query(`
     SELECT ap.*, u.username, u.full_name, u.created_at as member_since
     FROM athlete_profiles ap
     JOIN users u ON u.id = ap.user_id
-    WHERE u.username = ? AND ap.is_public = 1 AND u.role = 'athlete'
-  `).get(username);
+    WHERE u.username = $1 AND ap.is_public = 1 AND u.role = 'athlete'
+  `, [username]);
+  return rows[0] || null;
 }
 
-function upsertAthleteProfile(userId, data) {
-  const existing = db.prepare('SELECT id FROM athlete_profiles WHERE user_id = ?').get(userId);
-  if (existing) {
-    db.prepare(`
+async function upsertAthleteProfile(userId, data) {
+  const { rows } = await getPool().query('SELECT id FROM athlete_profiles WHERE user_id = $1', [userId]);
+  if (rows.length > 0) {
+    await getPool().query(`
       UPDATE athlete_profiles SET
-        age = ?, nationality = ?, utr = ?, itf_rank = ?, atp_rank = ?,
-        gpa = ?, sat = ?, graduation_year = ?, video_url = ?, bio = ?,
-        is_public = ?, updated_at = datetime('now')
-      WHERE user_id = ?
-    `).run(
+        age = $1, nationality = $2, utr = $3, itf_rank = $4, atp_rank = $5,
+        gpa = $6, sat = $7, graduation_year = $8, video_url = $9, bio = $10,
+        is_public = $11, updated_at = NOW()
+      WHERE user_id = $12
+    `, [
       data.age, data.nationality, data.utr, data.itf_rank, data.atp_rank,
       data.gpa, data.sat, data.graduation_year, data.video_url, data.bio,
-      data.is_public ?? 1, userId
-    );
+      data.is_public ?? 1, userId,
+    ]);
   } else {
-    db.prepare(`
+    await getPool().query(`
       INSERT INTO athlete_profiles
         (user_id, age, nationality, utr, itf_rank, atp_rank, gpa, sat, graduation_year, video_url, bio, is_public)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    `, [
       userId, data.age, data.nationality, data.utr, data.itf_rank, data.atp_rank,
       data.gpa, data.sat, data.graduation_year, data.video_url, data.bio,
-      data.is_public ?? 1
-    );
+      data.is_public ?? 1,
+    ]);
   }
 }
 
-function searchAthletes({ utrMin, utrMax, nationality, gradYear, tier, search, limit = 50 }) {
+async function searchAthletes({ utrMin, utrMax, nationality, gradYear, tier, search, limit = 50 }) {
   const { normalizePlayer } = require('../services/normalizationService');
 
   let sql = `
@@ -182,76 +178,82 @@ function searchAthletes({ utrMin, utrMax, nationality, gradYear, tier, search, l
     WHERE ap.is_public = 1 AND u.role = 'athlete' AND ap.utr IS NOT NULL
   `;
   const params = [];
+  let n = 0;
 
-  if (utrMin)      { sql += ' AND ap.utr >= ?';         params.push(Number(utrMin)); }
-  if (utrMax)      { sql += ' AND ap.utr <= ?';         params.push(Number(utrMax)); }
-  if (nationality) { sql += ' AND LOWER(ap.nationality) = LOWER(?)'; params.push(nationality); }
-  if (gradYear)    { sql += ' AND ap.graduation_year = ?'; params.push(Number(gradYear)); }
+  if (utrMin)      { n++; sql += ` AND ap.utr >= $${n}`;                              params.push(Number(utrMin)); }
+  if (utrMax)      { n++; sql += ` AND ap.utr <= $${n}`;                              params.push(Number(utrMax)); }
+  if (nationality) { n++; sql += ` AND LOWER(ap.nationality) = LOWER($${n})`;         params.push(nationality); }
+  if (gradYear)    { n++; sql += ` AND ap.graduation_year = $${n}`;                   params.push(Number(gradYear)); }
   if (search) {
-    sql += ' AND (LOWER(u.full_name) LIKE ? OR LOWER(u.username) LIKE ? OR LOWER(ap.nationality) LIKE ?)';
-    const q = `%${search.toLowerCase()}%`;
-    params.push(q, q, q);
+    n++;
+    sql += ` AND (LOWER(u.full_name) LIKE $${n} OR LOWER(u.username) LIKE $${n} OR LOWER(ap.nationality) LIKE $${n})`;
+    params.push(`%${search.toLowerCase()}%`);
   }
 
-  sql += ' ORDER BY ap.utr DESC LIMIT ?';
+  n++;
+  sql += ` ORDER BY ap.utr DESC LIMIT $${n}`;
   params.push(Number(limit));
 
-  const rows = db.prepare(sql).all(...params);
+  const { rows } = await getPool().query(sql, params);
 
   return rows.map((r) => {
     const { score, components } = normalizePlayer(r.utr, r.itf_rank, r.atp_rank);
-    const tier = score >= 0.80 ? 'Elite' : score >= 0.55 ? 'High' : 'Emerging';
-    return { ...r, player_strength_score: score, normalization_components: components, recruitment_tier: tier };
+    const rowTier = score >= 0.80 ? 'Elite' : score >= 0.55 ? 'High' : 'Emerging';
+    return { ...r, player_strength_score: score, normalization_components: components, recruitment_tier: rowTier };
   }).filter((r) => !tier || r.recruitment_tier === tier);
 }
 
 // ── Coach profile helpers ─────────────────────────────────────────────────────
 
-function getCoachProfile(userId) {
-  return db.prepare('SELECT * FROM coach_profiles WHERE user_id = ?').get(userId);
+async function getCoachProfile(userId) {
+  const { rows } = await getPool().query('SELECT * FROM coach_profiles WHERE user_id = $1', [userId]);
+  return rows[0] || null;
 }
 
-function upsertCoachProfile(userId, data) {
-  const existing = db.prepare('SELECT id FROM coach_profiles WHERE user_id = ?').get(userId);
-  if (existing) {
-    db.prepare(`
-      UPDATE coach_profiles SET school_name = ?, division = ?, position = ?, updated_at = datetime('now')
-      WHERE user_id = ?
-    `).run(data.school_name, data.division, data.position, userId);
+async function upsertCoachProfile(userId, data) {
+  const { rows } = await getPool().query('SELECT id FROM coach_profiles WHERE user_id = $1', [userId]);
+  if (rows.length > 0) {
+    await getPool().query(
+      'UPDATE coach_profiles SET school_name = $1, division = $2, position = $3, updated_at = NOW() WHERE user_id = $4',
+      [data.school_name, data.division, data.position, userId]
+    );
   } else {
-    db.prepare(
-      'INSERT INTO coach_profiles (user_id, school_name, division, position) VALUES (?, ?, ?, ?)'
-    ).run(userId, data.school_name, data.division, data.position);
+    await getPool().query(
+      'INSERT INTO coach_profiles (user_id, school_name, division, position) VALUES ($1, $2, $3, $4)',
+      [userId, data.school_name, data.division, data.position]
+    );
   }
 }
 
 // ── Search helpers ────────────────────────────────────────────────────────────
 
-function saveSearch({ userId, athlete, preferences, results, playerStrengthScore }) {
-  const info = db.prepare(`
+async function saveSearch({ userId, athlete, preferences, results, playerStrengthScore }) {
+  const { rows } = await getPool().query(`
     INSERT INTO searches (user_id, athlete_name, athlete_data, preferences, results, player_strength_score, match_count)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING id
+  `, [
     userId, athlete.name, JSON.stringify(athlete),
     JSON.stringify(preferences), JSON.stringify(results),
-    playerStrengthScore, results.length
-  );
-  return info.lastInsertRowid;
+    playerStrengthScore, results.length,
+  ]);
+  return rows[0].id;
 }
 
-function getSearchHistory(userId, limit = 20) {
-  return db.prepare(`
+async function getSearchHistory(userId, limit = 20) {
+  const { rows } = await getPool().query(`
     SELECT id, athlete_name, player_strength_score, match_count, preferences, created_at
-    FROM searches WHERE user_id = ? ORDER BY created_at DESC LIMIT ?
-  `).all(userId, limit).map((row) => ({
-    ...row,
-    preferences: JSON.parse(row.preferences),
-  }));
+    FROM searches WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2
+  `, [userId, limit]);
+  return rows.map((row) => ({ ...row, preferences: JSON.parse(row.preferences) }));
 }
 
-function getSearchById(id, userId) {
-  const row = db.prepare('SELECT * FROM searches WHERE id = ? AND user_id = ?').get(id, userId);
-  if (!row) return null;
+async function getSearchById(id, userId) {
+  const { rows } = await getPool().query(
+    'SELECT * FROM searches WHERE id = $1 AND user_id = $2', [id, userId]
+  );
+  if (rows.length === 0) return null;
+  const row = rows[0];
   return {
     ...row,
     athlete_data: JSON.parse(row.athlete_data),
@@ -262,23 +264,26 @@ function getSearchById(id, userId) {
 
 // ── College cache helpers ─────────────────────────────────────────────────────
 
-function getCachedCollege(schoolId) {
-  const row = db.prepare('SELECT data, fetched_at FROM colleges_cache WHERE school_id = ?').get(schoolId);
-  if (!row) return null;
-  const age = Date.now() - new Date(row.fetched_at).getTime();
+async function getCachedCollege(schoolId) {
+  const { rows } = await getPool().query(
+    'SELECT data, fetched_at FROM colleges_cache WHERE school_id = $1', [schoolId]
+  );
+  if (rows.length === 0) return null;
+  const age = Date.now() - new Date(rows[0].fetched_at).getTime();
   if (age > 7 * 24 * 60 * 60 * 1000) return null;
-  return JSON.parse(row.data);
+  return JSON.parse(rows[0].data);
 }
 
-function setCachedCollege(schoolId, data) {
-  db.prepare(`
-    INSERT INTO colleges_cache (school_id, data) VALUES (?, ?)
-    ON CONFLICT(school_id) DO UPDATE SET data = excluded.data, fetched_at = datetime('now')
-  `).run(schoolId, JSON.stringify(data));
+async function setCachedCollege(schoolId, data) {
+  await getPool().query(`
+    INSERT INTO colleges_cache (school_id, data) VALUES ($1, $2)
+    ON CONFLICT (school_id) DO UPDATE SET data = EXCLUDED.data, fetched_at = NOW()
+  `, [schoolId, JSON.stringify(data)]);
 }
 
 module.exports = {
-  getDb,
+  connectDb,
+  getPool,
   getUserByUsername, getUserById, createUser,
   getAthleteProfile, getAthleteProfileByUsername, upsertAthleteProfile, searchAthletes,
   getCoachProfile, upsertCoachProfile,
