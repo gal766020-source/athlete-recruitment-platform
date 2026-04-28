@@ -13,6 +13,7 @@ const schoolsRouter          = require('./routes/schools');
 const athletesRouter         = require('./routes/athletes');
 const coachesRouter          = require('./routes/coaches');
 const sendOutreachRouter     = require('./routes/sendOutreach');
+const itfRouter              = require('./routes/itf');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -38,6 +39,7 @@ app.use('/api/schools',           schoolsRouter);
 app.use('/api/athletes',          athletesRouter);
 app.use('/api/coaches',           coachesRouter);
 app.use('/api/send-outreach',     sendOutreachRouter);
+app.use('/api/itf',              itfRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

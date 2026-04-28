@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Spinner from '../components/Spinner';
 import OutreachModal from '../components/OutreachModal';
+import ItfDirectory from '../components/ItfDirectory';
 
 const TIER_COLORS = { Elite: '#9333ea', High: '#2563eb', Emerging: '#16a34a' };
 
@@ -10,6 +11,7 @@ export default function CoachDashboard() {
   const { authFetch } = useAuth();
   const navigate = useNavigate();
 
+  const [activeTab, setActiveTab] = useState('athletes');
   const [athletes, setAthletes] = useState([]);
   const [loading, setLoading]   = useState(false);
   const [searched, setSearched] = useState(false);
@@ -58,6 +60,34 @@ export default function CoachDashboard() {
 
   return (
     <div className="page-container wide">
+      <h1 className="page-heading">Recruit Athletes</h1>
+      <p className="page-subheading">Search registered athletes or browse the ITF Junior World Rankings.</p>
+
+      {/* Tab bar */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: '2px solid #e5e7eb' }}>
+        {[
+          { key: 'athletes', label: 'Find Athletes' },
+          { key: 'itf',      label: 'ITF Junior Rankings' },
+        ].map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            style={{
+              padding: '8px 20px', border: 'none', cursor: 'pointer', fontWeight: 600,
+              fontSize: 14, background: 'none',
+              borderBottom: activeTab === key ? '2px solid #111' : '2px solid transparent',
+              marginBottom: -2,
+              color: activeTab === key ? '#111' : '#888',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'itf' && <ItfDirectory coachProfile={coachProfile} />}
+
+      {activeTab === 'athletes' && <>
       {outreachTarget && (
         <OutreachModal
           athlete={{ name: outreachTarget.full_name || outreachTarget.username, utr: outreachTarget.utr, nationality: outreachTarget.nationality, age: outreachTarget.age, itf_rank: outreachTarget.itf_rank, gpa: outreachTarget.gpa }}
@@ -66,9 +96,6 @@ export default function CoachDashboard() {
           onClose={() => setOutreachTarget(null)}
         />
       )}
-
-      <h1 className="page-heading">Recruit Athletes</h1>
-      <p className="page-subheading">Search and filter publicly registered athletes by ranking, nationality, and graduation year.</p>
 
       {/* Search filters */}
       <div className="form-card" style={{ marginBottom: 20 }}>
@@ -231,6 +258,7 @@ export default function CoachDashboard() {
           </div>
         </>
       )}
+      </>}
     </div>
   );
 }
