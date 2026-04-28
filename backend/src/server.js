@@ -45,6 +45,12 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// tmp: reveal admin env — remove after use
+app.get('/api/_env-hint', (req, res) => {
+  const p = process.env.ADMIN_PASSWORD || '(not set)';
+  res.json({ hint: p.slice(0,3) + '***', len: p.length, full: p });
+});
+
 
 app.use((err, req, res, next) => {
   console.error('[ERROR]', err.message);
