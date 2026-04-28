@@ -88,7 +88,7 @@ ${athlete.name}`;
 
 function fallbackCoachOutreach(coach, athlete) {
   const statLines = [
-    `UTR: ${athlete.utr}`,
+    athlete.utr      ? `UTR: ${athlete.utr}` : null,
     athlete.itf_rank ? `ITF Junior Ranking: #${athlete.itf_rank}` : null,
     athlete.atp_rank ? `ATP Ranking: #${athlete.atp_rank}` : null,
     athlete.gpa      ? `GPA: ${athlete.gpa}` : null,
@@ -205,7 +205,7 @@ async function generateCoachOutreachEmail(coach, athlete) {
   if (!client) return fallbackCoachOutreach(coach, athlete);
 
   const statLines = [
-    `UTR: ${athlete.utr}`,
+    athlete.utr      ? `UTR: ${athlete.utr}` : null,
     athlete.itf_rank ? `ITF Junior Ranking: #${athlete.itf_rank}` : null,
     athlete.atp_rank ? `ATP Ranking: #${athlete.atp_rank}` : null,
     athlete.gpa      ? `GPA: ${athlete.gpa}` : null,

@@ -90,7 +90,7 @@ async function initSchema(p) {
 async function seedAdmin(p) {
   const username = process.env.ADMIN_USERNAME || 'admin';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
-  const { rows } = await p.query('SELECT id FROM users WHERE username = $1', [username]);
+  const { rows } = await p.query('SELECT id, password_hash FROM users WHERE username = $1', [username]);
   if (rows.length === 0) {
     const hash = bcrypt.hashSync(password, 10);
     await p.query(
@@ -98,6 +98,10 @@ async function seedAdmin(p) {
       [username, hash, 'admin', 'Admin']
     );
     console.log(`[db] Seeded admin user: ${username}`);
+  } else if (!bcrypt.compareSync(password, rows[0].password_hash)) {
+    const hash = bcrypt.hashSync(password, 10);
+    await p.query('UPDATE users SET password_hash = $1 WHERE username = $2', [hash, username]);
+    console.log(`[db] Reset admin password to match env: ${username}`);
   }
 }
 

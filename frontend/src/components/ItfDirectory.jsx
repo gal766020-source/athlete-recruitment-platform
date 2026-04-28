@@ -44,7 +44,7 @@ export default function ItfDirectory({ coachProfile }) {
     <div>
       {outreachTarget && (
         <OutreachModal
-          athlete={{ name: outreachTarget.name, nationality: outreachTarget.nationality, utr: 0 }}
+          athlete={{ name: outreachTarget.name, nationality: outreachTarget.nationality, utr: null }}
           coach={coachProfile}
           sender="coach"
           onClose={() => setOutreachTarget(null)}

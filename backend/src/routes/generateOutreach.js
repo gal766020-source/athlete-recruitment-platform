@@ -9,8 +9,8 @@ router.post('/', requireAuth, async (req, res, next) => {
   try {
     const { athlete, school: schoolName, sender, coach } = req.body;
 
-    if (!athlete || !athlete.name || typeof athlete.utr !== 'number') {
-      return res.status(400).json({ error: 'athlete.name and athlete.utr are required' });
+    if (!athlete || !athlete.name) {
+      return res.status(400).json({ error: 'athlete.name is required' });
     }
 
     let result;
