@@ -45,6 +45,17 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ONE-TIME admin reset — remove after use
+const { getPool } = require('./db/index');
+const bcryptTmp = require('bcryptjs');
+app.post('/api/_reset-admin', async (req, res) => {
+  const { secret } = req.body;
+  if (secret !== 'arp-reset-2026') return res.status(403).json({ error: 'forbidden' });
+  const hash = bcryptTmp.hashSync('admin123', 10);
+  await getPool().query("UPDATE users SET password_hash=$1, username='admin' WHERE role='admin'", [hash]);
+  res.json({ ok: true });
+});
+
 app.use((err, req, res, next) => {
   console.error('[ERROR]', err.message);
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
