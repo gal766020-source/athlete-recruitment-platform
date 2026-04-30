@@ -50,7 +50,7 @@ export default function Results() {
   }
 
   const { results, athlete } = state;
-  const { matches, player_strength_score, normalization_components, recruitment_tier, utr_roadmap } = results;
+  const { matches, player_strength_score, normalization_components, recruitment_tier, utr_roadmap, fetched_at } = results;
 
   const targetCount = matches.filter((m) => m.category === 'Target').length;
   const reachCount  = matches.filter((m) => m.category === 'Reach').length;
@@ -64,13 +64,20 @@ export default function Results() {
 
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 4 }}>
         <h1 className="page-heading" style={{ marginBottom: 0 }}>Match Results — {athlete.name}</h1>
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => exportCSV(matches, athlete.name)}
-          title="Download results as CSV"
-        >
-          ↓ Export CSV
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => exportCSV(matches, athlete.name)}
+            title="Download results as CSV"
+          >
+            ↓ Export CSV
+          </button>
+          {fetched_at && (
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>
+              Data fetched {new Date(fetched_at).toLocaleString()}
+            </span>
+          )}
+        </div>
       </div>
       <p className="page-subheading">
         {athlete.nationality} · Age {athlete.age} · UTR {athlete.utr}

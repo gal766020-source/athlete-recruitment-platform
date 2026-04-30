@@ -97,6 +97,7 @@ router.post('/', requireAuth, async (req, res, next) => {
       normalization_components: components,
       matches:                  withReasoning,
       utr_roadmap:              roadmap,
+      fetched_at:               new Date().toISOString(),
     });
   } catch (err) {
     next(err);

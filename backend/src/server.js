@@ -14,6 +14,7 @@ const athletesRouter         = require('./routes/athletes');
 const coachesRouter          = require('./routes/coaches');
 const sendOutreachRouter     = require('./routes/sendOutreach');
 const itfRouter              = require('./routes/itf');
+const coachSearchRouter      = require('./routes/coachSearch');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -40,6 +41,7 @@ app.use('/api/athletes',          athletesRouter);
 app.use('/api/coaches',           coachesRouter);
 app.use('/api/send-outreach',     sendOutreachRouter);
 app.use('/api/itf',              itfRouter);
+app.use('/api/coach-search',    coachSearchRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -59,6 +61,7 @@ async function start() {
     console.log(`[server] OpenAI:    ${process.env.OPENAI_API_KEY             ? 'enabled' : 'fallback mode'}`);
     console.log(`[server] Resend:    ${process.env.RESEND_API_KEY             ? 'enabled' : 'draft mode only'}`);
     console.log(`[server] Scorecard: ${process.env.COLLEGE_SCORECARD_API_KEY  ? 'enabled' : 'local data'}`);
+    console.log(`[server] SerpAPI:   ${process.env.SERP_API_KEY               ? 'enabled' : 'disabled'}`);
   });
 }
 
