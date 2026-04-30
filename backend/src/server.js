@@ -15,6 +15,7 @@ const coachesRouter          = require('./routes/coaches');
 const sendOutreachRouter     = require('./routes/sendOutreach');
 const itfRouter              = require('./routes/itf');
 const coachSearchRouter      = require('./routes/coachSearch');
+const programNewsRouter      = require('./routes/programNews');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -42,6 +43,7 @@ app.use('/api/coaches',           coachesRouter);
 app.use('/api/send-outreach',     sendOutreachRouter);
 app.use('/api/itf',              itfRouter);
 app.use('/api/coach-search',    coachSearchRouter);
+app.use('/api/program-news',    programNewsRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

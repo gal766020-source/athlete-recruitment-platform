@@ -14,6 +14,55 @@ function getRecruitmentTier(pss) {
   return 'Emerging';
 }
 
+function buildFacts(athlete, school, preferences) {
+  const facts = [];
+
+  // UTR gap — the most important number in tennis recruiting
+  const utrGap = parseFloat((athlete.utr - school.tennis_utr_benchmark).toFixed(1));
+  facts.push(utrGap >= 0
+    ? `UTR ${athlete.utr} is ${utrGap} pts above the ${school.tennis_utr_benchmark} benchmark`
+    : `UTR ${athlete.utr} is ${Math.abs(utrGap)} pts below the ${school.tennis_utr_benchmark} benchmark`);
+
+  // GPA — only if athlete provided it
+  if (athlete.gpa != null && school.gpa_min != null) {
+    const g = parseFloat((athlete.gpa - school.gpa_min).toFixed(2));
+    facts.push(g >= 0
+      ? `GPA ${athlete.gpa} clears the ${school.gpa_min} minimum by ${g} points`
+      : `GPA ${athlete.gpa} is ${Math.abs(g)} below the ${school.gpa_min} minimum`);
+  }
+
+  // SAT — only if athlete provided it
+  if (athlete.sat != null && school.sat_min != null) {
+    const inRange = athlete.sat >= school.sat_min && athlete.sat <= school.sat_max;
+    facts.push(`SAT ${athlete.sat} — school range ${school.sat_min}–${school.sat_max}${inRange ? ' (in range)' : ''}`);
+  }
+
+  // Tuition vs budget — real dollar comparison
+  const withinBudget = school.tuition <= preferences.max_tuition;
+  facts.push(withinBudget
+    ? `Tuition $${school.tuition.toLocaleString()}/yr — within your $${preferences.max_tuition.toLocaleString()} budget`
+    : `Tuition $${school.tuition.toLocaleString()}/yr — $${(school.tuition - preferences.max_tuition).toLocaleString()} over your budget`);
+
+  // Acceptance rate — real data from College Scorecard
+  if (school.acceptance_rate != null) {
+    facts.push(`Acceptance rate: ${Math.round(school.acceptance_rate * 100)}%`);
+  }
+
+  // Scholarship type — factual by division rules
+  const schMap = {
+    D1: 'D1 — full or partial athletic scholarships available',
+    D2: 'D2 — partial athletic scholarships available',
+    D3: 'D3 — no athletic scholarships; merit aid only',
+  };
+  if (schMap[school.division]) facts.push(schMap[school.division]);
+
+  // Rankings — only show what the athlete actually has
+  if (athlete.itf_rank) facts.push(`ITF Junior Rank: #${athlete.itf_rank}`);
+  if (athlete.atp_rank) facts.push(`ATP Rank: #${athlete.atp_rank}`);
+
+  return facts;
+}
+
 const router = express.Router();
 
 function validateRequest(body) {
@@ -62,6 +111,7 @@ router.post('/', requireAuth, async (req, res, next) => {
           category,
           scholarship_probability: scholarshipProbability,
           reasoning,
+          facts:                   buildFacts(athlete, school, preferences),
           sub_scores:              subScores,
           data_source:             school._source ?? 'local',
         };
